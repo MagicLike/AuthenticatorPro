@@ -221,6 +221,8 @@
     <string name="bitwardenImportHint">Import bitwarden_export.json file</string>
     <string name="winAuth" translatable="false">WinAuth</string>
     <string name="winAuthImportHint">Import winauth.txt file</string>
+    <string name="twoFas" translatable="false">2FAS</string>
+    <string name="twoFasImportHint">Import 2fas-backup.2fas file</string>
     <string name="authy" translatable="false">Authy</string>
     <string name="totpAuthenticator" translatable="false">TOTP Authenticator</string>
     <string name="totpAuthenticatorImportHint">Import TOTP_Backup.encrypt file</string>
@@ -258,12 +260,12 @@
     <string name="prefGeneral">General</string>
     <string name="prefShowBackupRemindersTitle">Backup Reminders</string>
     <string name="prefShowBackupRemindersSummary">Reminds you to back up your authenticators if important changes are made</string>
-
     <string name="prefAutoBackupTitle">Auto Backup</string>
     <string name="prefAutoBackupSummary">Automatically back up to a specific location when changes are made. Disables backup reminders.</string>
-
     <string name="prefLanguageTitle">Language</string>
     <string name="prefLanguageSummary">Choose a language to use throughout the app</string>
+    <string name="prefTapToCopyTitle">Tap to Copy</string>
+    <string name="prefTapToCopySummary">Copy the code to the clipboard when tapped</string>
 
     <string name="prefSecurity">Security</string>
     <string name="prefPasswordTitle">Password</string>
@@ -335,6 +337,7 @@
     <string name="swedish" translatable="false">Svenska</string>
     <string name="turkish" translatable="false">Türk</string>
     <string name="ukrainian" translatable="false">Українська мова</string>
+    <string name="arabic" translatable="false">اللغة العربية</string>
     <string name="thai" translatable="false">ภาษาไทย</string>
     <string name="japanese" translatable="false">日本語</string>
     <string name="chineseSimplified" translatable="false">简体中文</string>
