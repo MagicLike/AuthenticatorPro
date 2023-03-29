@@ -17,21 +17,22 @@ using AndroidX.Core.Content;
 using AndroidX.Core.View;
 using AndroidX.RecyclerView.Widget;
 using AndroidX.Work;
-using AuthenticatorPro.Droid.Adapter;
 using AuthenticatorPro.Droid.Callback;
-using AuthenticatorPro.Droid.Fragment;
-using AuthenticatorPro.Droid.LayoutManager;
+using AuthenticatorPro.Droid.Extension;
+using AuthenticatorPro.Droid.Interface;
+using AuthenticatorPro.Droid.Interface.Adapter;
+using AuthenticatorPro.Droid.Interface.Fragment;
+using AuthenticatorPro.Droid.Interface.LayoutManager;
+using AuthenticatorPro.Droid.Persistence.View;
 using AuthenticatorPro.Droid.Shared.Util;
 using AuthenticatorPro.Droid.Util;
-using AuthenticatorPro.Droid.Worker;
-using AuthenticatorPro.Shared.Data;
-using AuthenticatorPro.Shared.Data.Backup;
-using AuthenticatorPro.Shared.Data.Backup.Converter;
-using AuthenticatorPro.Shared.Entity;
-using AuthenticatorPro.Shared.Persistence;
-using AuthenticatorPro.Shared.Persistence.Exception;
-using AuthenticatorPro.Shared.Service;
-using AuthenticatorPro.Shared.View;
+using AuthenticatorPro.Core;
+using AuthenticatorPro.Core.Backup;
+using AuthenticatorPro.Core.Converter;
+using AuthenticatorPro.Core.Entity;
+using AuthenticatorPro.Core.Persistence;
+using AuthenticatorPro.Core.Persistence.Exception;
+using AuthenticatorPro.Core.Service;
 using Google.Android.Material.AppBar;
 using Google.Android.Material.BottomAppBar;
 using Google.Android.Material.Button;
@@ -41,15 +42,16 @@ using Google.Android.Material.Internal;
 using Google.Android.Material.Snackbar;
 using System;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Xamarin.Essentials;
 using Configuration = Android.Content.Res.Configuration;
-using Logger = AuthenticatorPro.Droid.Util.Logger;
 using Result = Android.App.Result;
 using SearchView = AndroidX.AppCompat.Widget.SearchView;
 using Timer = System.Timers.Timer;
 using Toolbar = AndroidX.AppCompat.Widget.Toolbar;
 using Uri = Android.Net.Uri;
+using UriParser = AuthenticatorPro.Core.UriParser;
 
 #if FDROID
 using ZXing;
@@ -126,7 +128,6 @@ namespace AuthenticatorPro.Droid.Activity
         private readonly ICustomIconService _customIconService;
         private readonly IImportService _importService;
         private readonly IRestoreService _restoreService;
-        private readonly IQrCodeService _qrCodeService;
 
         private readonly IAuthenticatorView _authenticatorView;
 
@@ -160,7 +161,6 @@ namespace AuthenticatorPro.Droid.Activity
             _customIconService = Dependencies.Resolve<ICustomIconService>();
             _importService = Dependencies.Resolve<IImportService>();
             _restoreService = Dependencies.Resolve<IRestoreService>();
-            _qrCodeService = Dependencies.Resolve<IQrCodeService>();
 
             _authenticatorView = Dependencies.Resolve<IAuthenticatorView>();
         }
@@ -564,7 +564,7 @@ namespace AuthenticatorPro.Droid.Activity
 
                 sub.SupportClicked += delegate
                 {
-                    StartWebBrowserActivity(Constants.BuyMeACoffee);
+                    StartWebBrowserActivity(GetString(Resource.String.buyMeACoffee));
                 };
 
                 sub.RateClicked += delegate
@@ -583,7 +583,7 @@ namespace AuthenticatorPro.Droid.Activity
 
                 sub.ViewGitHubClicked += delegate
                 {
-                    StartWebBrowserActivity(Constants.GitHubRepo);
+                    StartWebBrowserActivity(GetString(Resource.String.githubRepo));
                 };
 
                 sub.Show(SupportFragmentManager, sub.Tag);
@@ -999,14 +999,15 @@ namespace AuthenticatorPro.Droid.Activity
             _appBarLayout.SetExpanded(true);
         }
 
-        private void OnAuthenticatorClicked(object sender, int position)
+        private void OnAuthenticatorClicked(object sender, string secret)
         {
-            if (!_preferences.TapToCopy)
+            var auth = _authenticatorView.FirstOrDefault(a => a.Secret == secret);
+
+            if (auth == null || !_preferences.TapToCopy)
             {
                 return;
             }
 
-            var auth = _authenticatorView[position];
             var clipboard = (ClipboardManager) GetSystemService(ClipboardService);
             var clip = ClipData.NewPlainText("code", auth.GetCode());
             clipboard.PrimaryClip = clip;
@@ -1014,9 +1015,15 @@ namespace AuthenticatorPro.Droid.Activity
             ShowSnackbar(Resource.String.copiedToClipboard, Snackbar.LengthShort);
         }
 
-        private void OnAuthenticatorMenuClicked(object sender, int position)
+        private void OnAuthenticatorMenuClicked(object sender, string secret)
         {
-            var auth = _authenticatorView[position];
+            var auth = _authenticatorView.FirstOrDefault(a => a.Secret == secret);
+
+            if (auth == null)
+            {
+                return;
+            }
+
             var bundle = new Bundle();
             bundle.PutInt("type", (int) auth.Type);
             bundle.PutLong("counter", auth.Counter);
@@ -1082,8 +1089,7 @@ namespace AuthenticatorPro.Droid.Activity
                 }
 
                 await _authenticatorView.LoadFromPersistenceAsync();
-                var position = _authenticatorView.IndexOf(auth);
-                RunOnUiThread(delegate { _authenticatorListAdapter.NotifyItemRemoved(position); });
+                RunOnUiThread(delegate { _authenticatorListAdapter.NotifyDataSetChanged(); });
                 CheckEmptyState();
 
                 _preferences.BackupRequired = BackupRequirement.WhenPossible;
@@ -1233,7 +1239,7 @@ namespace AuthenticatorPro.Droid.Activity
 
             if (!barcodes.Any())
             {
-                ShowSnackbar(Resource.String.qrCodeNotFound, Snackbar.LengthShort);
+                ShowSnackbar(Resource.String.qrCodeFormatError, Snackbar.LengthShort);
                 return;
             }
 
@@ -1269,7 +1275,7 @@ namespace AuthenticatorPro.Droid.Activity
 
             try
             {
-                result = Authenticator.ParseUri(uri, _iconResolver);
+                result = UriParser.ParseStandardUri(uri, _iconResolver);
             }
             catch (ArgumentException)
             {
@@ -1308,7 +1314,7 @@ namespace AuthenticatorPro.Droid.Activity
 
                 RunOnUiThread(delegate
                 {
-                    _authenticatorListAdapter.NotifyItemInserted(position);
+                    _authenticatorListAdapter.NotifyDataSetChanged();
                     ScrollToPosition(position);
                 });
 
@@ -1339,30 +1345,9 @@ namespace AuthenticatorPro.Droid.Activity
 
         private async Task OnOtpAuthMigrationScan(string uri)
         {
-            int added;
-
-            try
-            {
-                added = await _qrCodeService.ParseOtpMigrationUri(uri);
-            }
-            catch (ArgumentException)
-            {
-                ShowSnackbar(Resource.String.qrCodeFormatError, Snackbar.LengthShort);
-                return;
-            }
-            catch (Exception e)
-            {
-                Logger.Error(e);
-                ShowSnackbar(Resource.String.genericError, Snackbar.LengthShort);
-                return;
-            }
-
-            await _authenticatorView.LoadFromPersistenceAsync();
-            await SwitchCategory(null);
-            RunOnUiThread(_authenticatorListAdapter.NotifyDataSetChanged);
-
-            var message = String.Format(GetString(Resource.String.restoredFromMigration), added);
-            ShowSnackbar(message, Snackbar.LengthLong);
+            var converter = new GoogleAuthenticatorBackupConverter(_iconResolver);
+            var data = Encoding.UTF8.GetBytes(uri);
+            await ImportFromData(converter, data);
         }
 
         private void RequestPermissionThenScanQrCode()
@@ -1386,7 +1371,7 @@ namespace AuthenticatorPro.Droid.Activity
             var fragment = new ImportBottomSheet();
             fragment.GoogleAuthenticatorClicked += delegate
             {
-                StartWebBrowserActivity(Constants.GitHubRepo + "/wiki/Importing-from-Google-Authenticator");
+                StartWebBrowserActivity(GetString(Resource.String.githubRepo) + "/wiki/Importing-from-Google-Authenticator");
             };
 
             // Use */* mime-type for most binary files because some files might not show on older Android versions
@@ -1419,7 +1404,7 @@ namespace AuthenticatorPro.Droid.Activity
 
             fragment.WinAuthClicked += delegate
             {
-                StartFilePickActivity("text/plain", RequestImportWinAuth);
+                StartFilePickActivity("*/*", RequestImportWinAuth);
             };
 
             fragment.TwoFasClicked += delegate
@@ -1429,7 +1414,7 @@ namespace AuthenticatorPro.Droid.Activity
 
             fragment.AuthyClicked += delegate
             {
-                StartWebBrowserActivity(Constants.GitHubRepo + "/wiki/Importing-from-Authy");
+                StartWebBrowserActivity(GetString(Resource.String.githubRepo) + "/wiki/Importing-from-Authy");
             };
 
             fragment.TotpAuthenticatorClicked += delegate
@@ -1439,12 +1424,12 @@ namespace AuthenticatorPro.Droid.Activity
 
             fragment.BlizzardAuthenticatorClicked += delegate
             {
-                StartWebBrowserActivity(Constants.GitHubRepo + "/wiki/Importing-from-Blizzard-Authenticator");
+                StartWebBrowserActivity(GetString(Resource.String.githubRepo) + "/wiki/Importing-from-Blizzard-Authenticator");
             };
 
             fragment.SteamClicked += delegate
             {
-                StartWebBrowserActivity(Constants.GitHubRepo + "/wiki/Importing-from-Steam");
+                StartWebBrowserActivity(GetString(Resource.String.githubRepo) + "/wiki/Importing-from-Steam");
             };
 
             fragment.UriListClicked += delegate
@@ -1536,21 +1521,8 @@ namespace AuthenticatorPro.Droid.Activity
             }
         }
 
-        private async Task ImportFromUri(BackupConverter converter, Uri uri)
+        private async Task ImportFromData(BackupConverter converter, byte[] data)
         {
-            byte[] data;
-
-            try
-            {
-                data = await FileUtil.ReadFile(this, uri);
-            }
-            catch (Exception e)
-            {
-                Logger.Error(e);
-                ShowSnackbar(Resource.String.filePickError, Snackbar.LengthShort);
-                return;
-            }
-
             async Task ConvertAndRestore(string password)
             {
                 var (conversionResult, restoreResult) = await _importService.ImportAsync(converter, data, password);
@@ -1633,6 +1605,24 @@ namespace AuthenticatorPro.Droid.Activity
 
                     break;
             }
+        }
+
+        private async Task ImportFromUri(BackupConverter converter, Uri uri)
+        {
+            byte[] data;
+
+            try
+            {
+                data = await FileUtil.ReadFile(this, uri);
+            }
+            catch (Exception e)
+            {
+                Logger.Error(e);
+                ShowSnackbar(Resource.String.filePickError, Snackbar.LengthShort);
+                return;
+            }
+
+            await ImportFromData(converter, data);
         }
 
         private async Task FinaliseRestore(RestoreResult result)
@@ -1857,7 +1847,7 @@ namespace AuthenticatorPro.Droid.Activity
 
             RunOnUiThread(delegate
             {
-                _authenticatorListAdapter.NotifyItemInserted(position);
+                _authenticatorListAdapter.NotifyDataSetChanged();
                 ScrollToPosition(position);
             });
 
